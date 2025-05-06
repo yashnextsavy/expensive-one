@@ -1,30 +1,21 @@
+import { Inter } from "next/font/google";
 import "./globals.css";
+import { LoadingProvider } from "@/components/LoadingProvider";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "Expense Tracker",
-  description: "A simple expense tracker PWA",
+  description: "Track your expenses efficiently",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
-      <body>
-        {children}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ("serviceWorker" in navigator) {
-                navigator.serviceWorker.register("/sw.js").catch((error) => {
-                  console.error("Service Worker registration failed:", error);
-                });
-              }
-            `,
-          }}
-        />
+      <body className={inter.className}>
+        <LoadingProvider>
+          {children}
+        </LoadingProvider>
       </body>
     </html>
   );
