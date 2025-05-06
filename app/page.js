@@ -1,103 +1,150 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { addExpense, syncExpenses, initializeAuth, getSyncStatus } from "../lib/firestore";
+import { getExpenses, getBudget } from "../lib/localStorage";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("Food");
+  const [expenses, setExpenses] = useState([]);
+  const [budget, setBudget] = useState(1000);
+  const [error, setError] = useState("");
+  const [syncStatus, setSyncStatus] = useState({ status: "Offline", pendingCount: 0 });
+  const router = useRouter();
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const categories = ["Food", "Travel", "Utilities", "Other"];
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        await initializeAuth();
+        setExpenses(getExpenses());
+        setBudget(getBudget());
+        await syncExpenses();
+        if (typeof getSyncStatus === "function") {
+          setSyncStatus(getSyncStatus());
+        } else {
+          console.error("getSyncStatus is not a function:", getSyncStatus);
+          setError("Sync status unavailable. Please refresh the page.");
+        }
+      } catch (err) {
+        setError("Failed to initialize app. Please try again.");
+      }
+    };
+    init();
+
+    // Update sync status periodically
+    const interval = setInterval(() => {
+      if (typeof getSyncStatus === "function") {
+        setSyncStatus(getSyncStatus());
+      } else {
+        console.error("getSyncStatus is not a function in interval:", getSyncStatus);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleAddExpense = async (e) => {
+    e.preventDefault();
+    if (!amount || !description) {
+      setError("Please enter both amount and description.");
+      return;
+    }
+    try {
+      await addExpense({ amount: parseFloat(amount), description, category });
+      setExpenses(getExpenses());
+      setAmount("");
+      setDescription("");
+      setCategory("Food");
+      setError("");
+      if (typeof getSyncStatus === "function") {
+        setSyncStatus(getSyncStatus());
+      }
+    } catch (err) {
+      setError("Failed to add expense. It will sync when online.");
+    }
+  };
+
+  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-100 to-gray-100 p-4 sm:p-6">
+      <div className="max-w-lg mx-auto bg-white rounded-xl shadow-lg p-6 sm:p-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Expense Tracker</h1>
+          <button
+            onClick={() => router.push("/settings")}
+            className="text-blue-600 hover:text-blue-800 font-medium"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Settings
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+        <div className="mb-6 text-sm text-gray-600">
+          <p className="font-semibold">
+            Sync Status: 
+            <span className={`ml-2 ${
+              syncStatus.status === "Online" ? "text-green-600" :
+              syncStatus.status === "Offline" ? "text-red-600" :
+              "text-yellow-600"
+            }`}>
+              {syncStatus.status}
+              {syncStatus.pendingCount > 0 && ` (${syncStatus.pendingCount} pending)`}
+            </span>
+          </p>
+          <p className="mt-2">Budget: ${budget.toFixed(2)}</p>
+          <p>Total Expenses: ${totalExpenses.toFixed(2)}</p>
+          <p className={budget - totalExpenses < 0 ? "text-red-600" : "text-green-600"}>
+            Remaining: ${(budget - totalExpenses).toFixed(2)}
+          </p>
+        </div>
+        {error && <p className="text-red-500 mb-4 text-sm">{error}</p>}
+        <form onSubmit={handleAddExpense} className="mb-6 space-y-4">
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Amount"
+            className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            step="0.01"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Description"
+            className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
           />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="w-full p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Add Expense
+          </button>
+        </form>
+        <ul className="space-y-2">
+          {expenses.map((exp) => (
+            <li key={exp.id} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center">
+              <div>
+                <p className="font-medium">{exp.description}</p>
+                <p className="text-sm text-gray-500">{exp.category} • {new Date(exp.timestamp).toLocaleDateString()}</p>
+              </div>
+              <p className="text-gray-800">${exp.amount.toFixed(2)}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
